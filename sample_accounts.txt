@@ -1,0 +1,23 @@
+DANH SÁCH TÀI KHOẢN MẪU
+========================
+
+1. Tài khoản ADMIN (Quản trị viên):
+   - Username: admin
+   - Password: 123
+   - Email: admin@hotel.com
+   - Vai trò: admin
+
+2. Tài khoản USER 1:
+   - Username: user1
+   - Password: 123
+   - Email: user1@gmail.com
+   - Vai trò: user
+
+3. Tài khoản USER 2:
+   - Username: user2
+   - Password: 123
+   - Email: user2@gmail.com
+   - Vai trò: user
+
+Lưu ý: Bạn có thể sử dụng các tài khoản này để đăng nhập ngay lập tức.
+Chức năng đăng ký mới hiện tại sẽ mặc định tạo tài khoản với vai trò "user" để đảm bảo bảo mật.
