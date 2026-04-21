@@ -21,10 +21,27 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
     });
   }
 
-  void _updateStatus(int bookingId, String status) async {
-    await DatabaseHelper.instance.updateBookingStatus(bookingId, status);
+  // NÂNG CẤP: Tự động hóa thay đổi trạng thái phòng khi đổi trạng thái đơn hàng
+  void _updateStatus(int bookingId, int roomId, String newStatus) async {
+    showDialog(context: context, barrierDismissible: false, builder: (c) => Center(child: CircularProgressIndicator()));
+    
+    await DatabaseHelper.instance.updateBookingStatus(bookingId, newStatus);
+    
+    // LOGIC TỰ ĐỘNG HÓA
+    if (newStatus == 'Checked-in') {
+      // Khách nhận phòng -> Đổi phòng sang trạng thái Occupied
+      await DatabaseHelper.instance.updateRoomStatus(roomId, 'Occupied');
+    } else if (newStatus == 'Completed') {
+      // Khách trả phòng -> Đổi phòng về trạng thái Available
+      await DatabaseHelper.instance.updateRoomStatus(roomId, 'Available');
+    } else if (newStatus == 'Cancelled') {
+      // Hủy đơn -> Đổi phòng về Available
+      await DatabaseHelper.instance.updateRoomStatus(roomId, 'Available');
+    }
+
+    Navigator.pop(context); // Tắt loading
     _loadBookings();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã cập nhật trạng thái: $status')));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã cập nhật: $newStatus')));
   }
 
   void _viewBill(String? url) {
@@ -37,8 +54,7 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
       builder: (context) => AlertDialog(
         title: Text('Minh chứng thanh toán'),
         content: Container(
-          width: 500,
-          height: 500,
+          width: 500, height: 500,
           child: Image.network(url, fit: BoxFit.contain, errorBuilder: (c,e,s) => Center(child: Text('Không thể tải ảnh bill'))),
         ),
         actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text('ĐÓNG'))],
@@ -50,6 +66,7 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
     switch (status) {
       case 'Pending': return Colors.orange;
       case 'Confirmed': return Colors.blue;
+      case 'Checked-in': return Colors.purple;
       case 'Completed': return Colors.green;
       case 'Cancelled': return Colors.red;
       default: return Colors.grey;
@@ -59,7 +76,7 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Duyệt đơn đặt phòng'), backgroundColor: Colors.red[900], foregroundColor: Colors.white),
+      appBar: AppBar(title: Text('DUYỆT ĐƠN ĐẶT PHÒNG'), backgroundColor: Colors.red[900], foregroundColor: Colors.white),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _bookingsFuture,
         builder: (context, snapshot) {
@@ -98,26 +115,51 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
                       Text('SĐT: ${b['phone']}'),
                       Text('Giá: ${b['totalPrice'].toStringAsFixed(0)}đ'),
                       SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          ElevatedButton.icon(
-                            onPressed: () => _viewBill(b['paymentProofUrl']),
-                            icon: Icon(Icons.receipt_long),
-                            label: Text('XEM BILL'),
-                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[900], foregroundColor: Colors.white),
-                          ),
-                          if (b['status'] == 'Pending') Row(
-                            children: [
-                              IconButton(icon: Icon(Icons.check_circle, color: Colors.green, size: 35), onPressed: () => _updateStatus(b['id'], 'Confirmed')),
-                              IconButton(icon: Icon(Icons.cancel, color: Colors.red, size: 35), onPressed: () => _updateStatus(b['id'], 'Cancelled')),
+                      
+                      // NÚT HÀNH ĐỘNG THEO QUY TRÌNH
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            ElevatedButton.icon(
+                              onPressed: () => _viewBill(b['paymentProofUrl']),
+                              icon: Icon(Icons.receipt_long),
+                              label: Text('XEM BILL'),
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[900], foregroundColor: Colors.white),
+                            ),
+                            SizedBox(width: 10),
+                            
+                            if (b['status'] == 'Pending') ...[
+                              ElevatedButton(
+                                onPressed: () => _updateStatus(b['id'], b['roomId'], 'Confirmed'),
+                                child: Text('XÁC NHẬN BILL'),
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                              ),
+                              SizedBox(width: 10),
+                              ElevatedButton(
+                                onPressed: () => _updateStatus(b['id'], b['roomId'], 'Cancelled'),
+                                child: Text('HỦY ĐƠN'),
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                              ),
                             ],
-                          ),
-                          if (b['status'] == 'Confirmed') ElevatedButton(
-                            onPressed: () => _updateStatus(b['id'], 'Completed'),
-                            child: Text('HOÀN THÀNH'),
-                          ),
-                        ],
+                            
+                            if (b['status'] == 'Confirmed') 
+                              ElevatedButton.icon(
+                                onPressed: () => _updateStatus(b['id'], b['roomId'], 'Checked-in'),
+                                icon: Icon(Icons.login),
+                                label: Text('NHẬN PHÒNG (CHECK-IN)'),
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
+                              ),
+                              
+                            if (b['status'] == 'Checked-in')
+                              ElevatedButton.icon(
+                                onPressed: () => _updateStatus(b['id'], b['roomId'], 'Completed'),
+                                icon: Icon(Icons.logout),
+                                label: Text('TRẢ PHÒNG (CHECK-OUT)'),
+                                style: ElevatedButton.styleFrom(backgroundColor: Colors.green[800], foregroundColor: Colors.white),
+                              ),
+                          ],
+                        ),
                       ),
                     ],
                   ),

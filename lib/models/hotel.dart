@@ -5,7 +5,8 @@ class Hotel {
   final String description;
   final String amenities;
   final String imageUrl;
-  final List<String> gallery; // Thêm danh sách ảnh album
+  final List<String> gallery;
+  final int stars; // Thêm số sao
 
   Hotel({
     this.id,
@@ -15,6 +16,7 @@ class Hotel {
     required this.amenities,
     required this.imageUrl,
     this.gallery = const [],
+    this.stars = 3,
   });
 
   Map<String, dynamic> toMap() {
@@ -25,7 +27,8 @@ class Hotel {
       'description': description,
       'amenities': amenities,
       'image_url': imageUrl,
-      'gallery': gallery.join(','), // Lưu vào DB dạng chuỗi
+      'gallery': gallery.join(','),
+      'stars': stars,
     };
   }
 
@@ -38,6 +41,7 @@ class Hotel {
       amenities: map['amenities'],
       imageUrl: map['image_url'] ?? '',
       gallery: (map['gallery'] as String?)?.split(',').where((s) => s.isNotEmpty).toList() ?? [],
+      stars: map['stars'] ?? 3,
     );
   }
 }

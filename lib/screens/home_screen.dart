@@ -7,6 +7,7 @@ import 'hotel_detail_screen.dart';
 import 'my_bookings_screen.dart';
 import 'login_screen.dart';
 import 'profile_screen.dart';
+import 'search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   @override
@@ -15,9 +16,6 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late Future<List<Hotel>> _hotelsFuture;
-  String _searchQuery = '';
-  String _selectedCity = 'Tất cả';
-  final List<String> _cities = ['Tất cả', 'Vũng Tàu', 'Đà Lạt', 'Đà Nẵng', 'Hà Nội', 'Phú Quốc', 'Sapa', 'Nha Trang'];
 
   @override
   void initState() {
@@ -29,24 +27,24 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
     final user = userProvider.user;
-    final isWeb = MediaQuery.of(context).size.width > 800;
+    final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Text('VN-BOOKING', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5)),
         backgroundColor: Colors.blue[900],
         foregroundColor: Colors.white,
-        elevation: 0,
         actions: [
-          if (user != null) Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 10),
-            child: OutlinedButton.icon(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ProfileScreen())),
-              icon: Icon(Icons.person, color: Colors.white),
-              label: Text(user.fullName ?? user.username, style: TextStyle(color: Colors.white)),
-              style: OutlinedButton.styleFrom(side: BorderSide(color: Colors.white30)),
-            ),
+          IconButton(
+            icon: Icon(Icons.search, size: 28),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => SearchScreen())),
+            tooltip: 'Tìm kiếm phòng',
+          ),
+          if (user != null && screenWidth > 700) TextButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => ProfileScreen())),
+            icon: Icon(Icons.person, color: Colors.white),
+            label: Text(user.fullName ?? user.username, style: TextStyle(color: Colors.white)),
           ),
           IconButton(
             icon: Icon(Icons.logout),
@@ -57,98 +55,138 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Banner tìm kiếm
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.symmetric(vertical: 30, horizontal: 20),
-            color: Colors.blue[900],
-            child: Column(
-              children: [
-                Text('Tìm địa điểm nghỉ dưỡng tiếp theo', 
-                  style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                SizedBox(height: 20),
-                Container(
-                  constraints: BoxConstraints(maxWidth: 800),
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: 'Nhập tên khách sạn...',
-                      prefixIcon: Icon(Icons.search),
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                    ),
-                    onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
-                  ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 300,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.blue[800],
+                image: DecorationImage(
+                  image: NetworkImage('https://images.unsplash.com/photo-1445013544686-8301b8918cb4?w=1200'),
+                  fit: BoxFit.cover,
+                  colorFilter: ColorFilter.mode(Colors.black.withOpacity(0.4), BlendMode.darken),
                 ),
-              ],
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text('Bạn muốn đi đâu?', 
+                    style: TextStyle(color: Colors.white, fontSize: screenWidth > 600 ? 36 : 26, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 30),
+                  GestureDetector(
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => SearchScreen())),
+                    child: Container(
+                      width: screenWidth * 0.9,
+                      constraints: BoxConstraints(maxWidth: 700),
+                      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      decoration: BoxDecoration(
+                        color: Colors.white, 
+                        borderRadius: BorderRadius.circular(35),
+                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10)],
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.search, color: Colors.blue[900]),
+                          SizedBox(width: 15),
+                          Expanded(
+                            child: Text(
+                              'Nhấn để tìm theo Thành phố, Số sao, Ngày ở...', 
+                              style: TextStyle(color: Colors.grey[600], fontSize: 15),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Container(
+                            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                            decoration: BoxDecoration(color: Colors.blue[900], borderRadius: BorderRadius.circular(25)),
+                            child: Text('TÌM KIẾM', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+                          )
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          
-          // Thanh chọn địa điểm nhanh
-          Container(
-            height: 60,
-            color: Colors.white,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: EdgeInsets.symmetric(horizontal: 10),
-              itemCount: _cities.length,
-              itemBuilder: (context, index) {
-                final city = _cities[index];
-                final isSelected = _selectedCity == city;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 10),
-                  child: ChoiceChip(
-                    label: Text(city),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() => _selectedCity = city);
+            
+            Padding(
+              padding: EdgeInsets.all(screenWidth > 600 ? 40.0 : 20.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionHeader('ĐỊA ĐIỂM NỔI BẬT'),
+                  SizedBox(height: 20),
+                  Container(
+                    height: 160,
+                    child: ListView(
+                      scrollDirection: Axis.horizontal,
+                      children: [
+                        _buildCityCard('Vũng Tàu', 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400'),
+                        _buildCityCard('Đà Lạt', 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?w=400'),
+                        _buildCityCard('Đà Nẵng', 'https://images.unsplash.com/photo-1571896349842-33c89424de2d?w=400'),
+                        _buildCityCard('Sapa', 'https://images.unsplash.com/photo-1580587771525-78b9dba3b914?w=400'),
+                      ],
+                    ),
+                  ),
+                  
+                  SizedBox(height: 50),
+                  _buildSectionHeader('GỢI Ý CHO BẠN (Đặt nhiều nhất)'),
+                  SizedBox(height: 20),
+                  FutureBuilder<List<Hotel>>(
+                    future: _hotelsFuture,
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+                      final hotels = snapshot.data!.take(4).toList();
+                      return GridView.builder(
+                        shrinkWrap: true,
+                        physics: NeverScrollableScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: screenWidth > 1200 ? 4 : (screenWidth > 600 ? 2 : 1), 
+                          crossAxisSpacing: 20, 
+                          mainAxisSpacing: 20, 
+                          childAspectRatio: 0.8
+                        ),
+                        itemCount: hotels.length,
+                        itemBuilder: (context, index) => _buildHotelCard(hotels[index]),
+                      );
                     },
-                    selectedColor: Colors.blue[900],
-                    labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black),
                   ),
-                );
-              },
+                ],
+              ),
             ),
-          ),
-
-          Expanded(
-            child: FutureBuilder<List<Hotel>>(
-              future: _hotelsFuture,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
-                
-                final filteredHotels = snapshot.data!.where((h) {
-                  final matchesSearch = h.name.toLowerCase().contains(_searchQuery);
-                  final matchesCity = _selectedCity == 'Tất cả' || h.location == _selectedCity;
-                  return matchesSearch && matchesCity;
-                }).toList();
-
-                return GridView.builder(
-                  padding: EdgeInsets.all(20),
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: isWeb ? 3 : 1,
-                    childAspectRatio: 0.8,
-                    crossAxisSpacing: 20,
-                    mainAxisSpacing: 20,
-                  ),
-                  itemCount: filteredHotels.length,
-                  itemBuilder: (context, index) {
-                    final hotel = filteredHotels[index];
-                    return _buildHotelCard(hotel);
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => MyBookingsScreen())),
-        label: Text('Đơn của tôi'),
+        label: Text('Đơn đặt phòng'),
         icon: Icon(Icons.list_alt),
         backgroundColor: Colors.blue[900],
+        foregroundColor: Colors.white, // SỬA MÀU CHỮ Ở ĐÂY
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Text(title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.blue[900]));
+  }
+
+  Widget _buildCityCard(String name, String url) {
+    return InkWell(
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => SearchScreen())),
+      child: Container(
+        width: 220,
+        margin: EdgeInsets.only(right: 15),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          image: DecorationImage(image: NetworkImage(url), fit: BoxFit.cover),
+        ),
+        child: Container(
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(15), color: Colors.black38),
+          child: Center(child: Text(name, style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold))),
+        ),
       ),
     );
   }
@@ -156,53 +194,32 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHotelCard(Hotel hotel) {
     return Card(
       elevation: 5,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
       child: InkWell(
-        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => HotelDetailScreen(hotel: hotel))),
+        onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => HotelDetailScreen(hotel: hotel))),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               child: Image.network(
-                hotel.imageUrl,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                errorBuilder: (c, e, s) => Container(color: Colors.grey, child: Icon(Icons.hotel, size: 50)),
+                hotel.imageUrl, fit: BoxFit.cover, width: double.infinity,
+                errorBuilder: (c,e,s) => Container(color: Colors.grey[200], child: Icon(Icons.hotel, size: 50, color: Colors.grey)),
               ),
             ),
             Padding(
-              padding: EdgeInsets.all(12),
+              padding: const EdgeInsets.all(12.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(hotel.name, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold), maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(hotel.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16), maxLines: 1, overflow: TextOverflow.ellipsis),
                   SizedBox(height: 5),
                   Row(
                     children: [
-                      Icon(Icons.location_on, size: 16, color: Colors.red),
-                      SizedBox(width: 4),
-                      Text(hotel.location, style: TextStyle(color: Colors.grey[700])),
-                    ],
-                  ),
-                  SizedBox(height: 8),
-                  Text(hotel.amenities, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.blue[700])),
-                  Divider(),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Giá từ', style: TextStyle(fontSize: 12, color: Colors.grey)),
-                          Text('600.000đ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.orange[900])),
-                        ],
-                      ),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(color: Colors.blue[900], borderRadius: BorderRadius.circular(8)),
-                        child: Text('Xem phòng', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                      ),
+                      ...List.generate(5, (i) => Icon(Icons.star, color: i < hotel.stars ? Colors.orange : Colors.grey[300], size: 14)),
+                      Spacer(),
+                      Icon(Icons.location_on, color: Colors.red, size: 14),
+                      Text(' ${hotel.location}', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
                     ],
                   ),
                 ],

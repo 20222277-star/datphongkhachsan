@@ -17,19 +17,29 @@ class HotelDetailScreen extends StatefulWidget {
 
 class _HotelDetailScreenState extends State<HotelDetailScreen> {
   late Future<List<Room>> _roomsFuture;
-  late Future<List<Map<String, dynamic>>> _reviewsFuture;
   DateTimeRange? _selectedDateRange;
   String _selectedImageUrl = '';
 
   @override
   void initState() {
     super.initState();
-    _roomsFuture = DatabaseHelper.instance.getRoomsByHotel(widget.hotel.id!);
-    _reviewsFuture = DatabaseHelper.instance.getReviewsByHotel(widget.hotel.id!);
     _selectedImageUrl = widget.hotel.imageUrl;
+    _loadAvailableRooms(); // Khởi tạo danh sách phòng
   }
 
-  // Nâng cấp: Quy trình chọn phương thức thanh toán
+  // Hàm tải danh sách phòng trống thực tế
+  void _loadAvailableRooms() {
+    setState(() {
+      if (_selectedDateRange == null) {
+        // Nếu chưa chọn ngày, hiện tất cả phòng đang ở trạng thái 'Available'
+        _roomsFuture = DatabaseHelper.instance.getRoomsByHotel(widget.hotel.id!);
+      } else {
+        // Nếu đã chọn ngày, gọi hàm thông minh để lọc phòng chưa bị đặt
+        _roomsFuture = DatabaseHelper.instance.getAvailableRooms(widget.hotel.id!, _selectedDateRange!);
+      }
+    });
+  }
+
   void _showBookingDialog(Room room) {
     if (_selectedDateRange == null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Vui lòng chọn ngày nhận/trả phòng trước!')));
@@ -73,7 +83,7 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
 
   void _confirmBooking(Room room, String method, double finalPrice) async {
     final user = Provider.of<UserProvider>(context, listen: false).user;
-    Navigator.pop(context); // Đóng dialog chọn method
+    Navigator.pop(context);
 
     final booking = Booking(
       userId: user!.id!,
@@ -82,22 +92,23 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
       checkOutDate: _selectedDateRange!.end,
       totalPrice: finalPrice,
       paymentMethod: method,
-      status: method == 'AtHotel' ? 'Confirmed' : 'Pending', // AtHotel thì xác nhận luôn
+      status: method == 'AtHotel' ? 'Confirmed' : 'Pending',
     );
 
     showDialog(context: context, builder: (c) => Center(child: CircularProgressIndicator()));
     await DatabaseHelper.instance.createBooking(booking);
-    Navigator.pop(context); // Tắt loading
+    Navigator.pop(context);
 
     if (method == 'Online') {
       _showQRDialog(finalPrice);
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đặt phòng thành công! Hẹn gặp bạn tại khách sạn.')));
     }
-    setState(() { _roomsFuture = DatabaseHelper.instance.getRoomsByHotel(widget.hotel.id!); });
+    _loadAvailableRooms(); // Tải lại danh sách phòng sau khi đặt
   }
 
-  void _showQRDialog(double price) {
+  void _showQRDialog(double price) async {
+    final qrUrl = await DatabaseHelper.instance.getQRCode();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -105,26 +116,15 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text('Bạn vui lòng quét mã QR để thanh toán:'),
+            Text('Vui lòng quét mã QR để thanh toán:'),
             SizedBox(height: 15),
-            // Giả lập mã VietQR
-            Container(
-              padding: EdgeInsets.all(10),
-              decoration: BoxDecoration(border: Border.all(color: Colors.grey[300]!)),
-              child: Image.network('https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=VCB_STK123456_AMOUNT_${price.toInt()}', height: 200),
-            ),
+            Image.network(qrUrl, height: 250, errorBuilder: (c,e,s) => Icon(Icons.qr_code, size: 100)),
             SizedBox(height: 10),
-            Text('Số tiền: ${price.toStringAsFixed(0)}đ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            SizedBox(height: 10),
-            Text('Nội dung: CK DAT PHONG ${DateTime.now().millisecondsSinceEpoch}', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            Text('Số tiền: ${price.toStringAsFixed(0)}đ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue[900])),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('XONG')),
-          ElevatedButton(onPressed: () {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Vui lòng vào mục "Đơn của tôi" để gửi ảnh Bill xác nhận.')));
-          }, child: Text('TÔI ĐÃ CHUYỂN KHOẢN')),
+          ElevatedButton(onPressed: () => Navigator.pop(context), child: Text('TÔI ĐÀ CHUYỂN KHOẢN')),
         ],
       ),
     );
@@ -168,10 +168,14 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
                   ElevatedButton.icon(
                     onPressed: () async {
                       final picked = await showDateRangePicker(context: context, firstDate: DateTime.now(), lastDate: DateTime.now().add(Duration(days: 365)));
-                      if (picked != null) setState(() => _selectedDateRange = picked);
+                      if (picked != null) {
+                        setState(() => _selectedDateRange = picked);
+                        _loadAvailableRooms(); // Gọi hàm lọc lại phòng khi đổi ngày
+                      }
                     },
                     icon: Icon(Icons.calendar_month),
-                    label: Text(_selectedDateRange == null ? 'Bấm để chọn ngày Nhận & Trả phòng' : 'Đã chọn thời gian'),
+                    label: Text(_selectedDateRange == null ? 'Bấm để chọn ngày Nhận & Trả phòng' : 'Đã chọn: ${_selectedDateRange!.start.toString().split(' ')[0]} - ${_selectedDateRange!.end.toString().split(' ')[0]}'),
+                    style: ElevatedButton.styleFrom(backgroundColor: _selectedDateRange == null ? Colors.grey[200] : Colors.blue[50], foregroundColor: Colors.blue[900]),
                   ),
                   SizedBox(height: 30),
                   _buildSectionTitle('DANH SÁCH PHÒNG'),
@@ -179,11 +183,14 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
                     future: _roomsFuture,
                     builder: (context, snapshot) {
                       if (!snapshot.hasData) return CircularProgressIndicator();
+                      final rooms = snapshot.data!;
+                      if (rooms.isEmpty) return Text('Tiếc quá! Không còn phòng trống trong khoảng thời gian này.', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold));
+
                       return ListView.builder(
                         shrinkWrap: true, physics: NeverScrollableScrollPhysics(),
-                        itemCount: snapshot.data!.length,
+                        itemCount: rooms.length,
                         itemBuilder: (context, index) {
-                          final room = snapshot.data![index];
+                          final room = rooms[index];
                           return Card(
                             child: ListTile(
                               leading: Icon(Icons.king_bed, color: Colors.blue[900]),
@@ -191,7 +198,6 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
                               subtitle: Text('${room.price.toStringAsFixed(0)}đ / đêm'),
                               trailing: ElevatedButton(
                                 onPressed: room.isAvailable ? () => _showBookingDialog(room) : null,
-                                style: ElevatedButton.styleFrom(backgroundColor: room.isAvailable ? Colors.orange[900] : Colors.grey, foregroundColor: Colors.white),
                                 child: Text(room.isAvailable ? 'ĐẶT PHÒNG' : 'HẾT PHÒNG'),
                               ),
                             ),
