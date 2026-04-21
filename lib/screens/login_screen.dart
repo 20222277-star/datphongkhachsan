@@ -14,8 +14,8 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _obscurePassword = true; // Biến điều khiển ẩn hiện mật khẩu
-  bool _isLoading = false; // Biến điều khiển trạng thái loading
+  bool _obscurePassword = true;
+  bool _isLoading = false;
 
   void _login() async {
     final username = _usernameController.text.trim();
@@ -28,125 +28,154 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      print('DEBUG: Đang thử đăng nhập với username: $username');
       final user = await DatabaseHelper.instance.login(username, password);
-
       if (!mounted) return;
 
       if (user != null) {
-        print('DEBUG: Đăng nhập thành công! Role: ${user.role}');
         Provider.of<UserProvider>(context, listen: false).setUser(user);
-        
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Đăng nhập thành công! Chào mừng ${user.username}')),
-        );
-
-        // Đợi 1 chút để người dùng thấy thông báo thành công
-        await Future.delayed(Duration(milliseconds: 500));
-
         if (user.role == 'admin') {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => AdminHomeScreen()),
-          );
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => AdminHomeScreen()));
         } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => HomeScreen()),
-          );
+          Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => HomeScreen()));
         }
       } else {
-        print('DEBUG: Không tìm thấy user hoặc sai pass');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Tên đăng nhập hoặc mật khẩu không đúng')),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tên đăng nhập hoặc mật khẩu không đúng')));
       }
     } catch (e) {
-      print('DEBUG: Lỗi hệ thống: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Đã xảy ra lỗi: $e')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi hệ thống: $e')));
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Đăng nhập hệ thống')),
-      body: Padding(
-        padding: EdgeInsets.all(20.0),
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.blue[900]!, Colors.blue[400]!, Colors.blue[100]!],
+          ),
+        ),
         child: Center(
           child: SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.hotel_class, size: 80, color: Colors.blue),
-                SizedBox(height: 20),
-                Text('CHÀO MỪNG QUAY LẠI', 
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                SizedBox(height: 30),
-                TextField(
-                  controller: _usernameController,
-                  decoration: InputDecoration(
-                    labelText: 'Tên đăng nhập',
-                    prefixIcon: Icon(Icons.person),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  ),
-                ),
-                SizedBox(height: 20),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  decoration: InputDecoration(
-                    labelText: 'Mật khẩu',
-                    prefixIcon: Icon(Icons.lock),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 30),
+              child: Column(
+                children: [
+                  // LOGO & TITLE
+                  Icon(Icons.waves, size: 80, color: Colors.white),
+                  SizedBox(height: 10),
+                  Text(
+                    'VN-BOOKING',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 2,
                     ),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
-                SizedBox(height: 30),
-                _isLoading 
-                  ? CircularProgressIndicator() 
-                  : ElevatedButton(
-                      onPressed: _login,
-                      style: ElevatedButton.styleFrom(
-                        minimumSize: Size(double.infinity, 55),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
+                  Text(
+                    'Trải nghiệm kỳ nghỉ mơ ước',
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                  SizedBox(height: 40),
+
+                  // LOGIN CARD
+                  Container(
+                    padding: EdgeInsets.all(30),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black26,
+                          blurRadius: 15,
+                          offset: Offset(0, 5),
+                        )
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          'ĐĂNG NHẬP',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue[900],
+                          ),
+                        ),
+                        SizedBox(height: 30),
+                        TextField(
+                          controller: _usernameController,
+                          decoration: InputDecoration(
+                            labelText: 'Tên đăng nhập',
+                            prefixIcon: Icon(Icons.person, color: Colors.blue[900]),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                          ),
+                        ),
+                        SizedBox(height: 20),
+                        TextField(
+                          controller: _passwordController,
+                          obscureText: _obscurePassword,
+                          decoration: InputDecoration(
+                            labelText: 'Mật khẩu',
+                            prefixIcon: Icon(Icons.lock, color: Colors.blue[900]),
+                            suffixIcon: IconButton(
+                              icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(15)),
+                          ),
+                        ),
+                        SizedBox(height: 30),
+                        _isLoading
+                            ? CircularProgressIndicator()
+                            : ElevatedButton(
+                                onPressed: _login,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.blue[900],
+                                  foregroundColor: Colors.white,
+                                  minimumSize: Size(double.infinity, 55),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                                  elevation: 5,
+                                ),
+                                child: Text(
+                                  'BẮT ĐẦU NGAY',
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                      ],
+                    ),
+                  ),
+                  
+                  SizedBox(height: 30),
+                  // BOTTOM BUTTONS
+                  TextButton(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => RegisterScreen())),
+                    child: RichText(
+                      text: TextSpan(
+                        text: 'Bạn là thành viên mới? ',
+                        style: TextStyle(color: Colors.white),
+                        children: [
+                          TextSpan(
+                            text: 'Đăng ký ngay',
+                            style: TextStyle(fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                          ),
+                        ],
                       ),
-                      child: Text('ĐĂNG NHẬP', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
-                SizedBox(height: 15),
-                TextButton(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => RegisterScreen()),
-                    );
-                  },
-                  child: Text('Chưa có tài khoản? Đăng ký ngay', 
-                    style: TextStyle(color: Colors.blueAccent)),
-                ),
-              ],
+                  ),
+                  SizedBox(height: 20),
+                ],
+              ),
             ),
           ),
         ),

@@ -2,7 +2,7 @@ class Room {
   final int? id;
   final int hotelId;
   final String roomNumber;
-  final String type; // e.g., "Single", "Double", "Suite"
+  final String type;
   final double price;
   final bool isAvailable;
 
@@ -17,23 +17,22 @@ class Room {
 
   Map<String, dynamic> toMap() {
     return {
-      'id': id,
-      'hotelId': hotelId,
-      'roomNumber': roomNumber,
+      'hotel_id': hotelId,
+      'room_number': roomNumber,
       'type': type,
       'price': price,
-      'isAvailable': isAvailable ? 1 : 0,
+      'status': isAvailable ? 'Available' : 'Maintenance', // Đồng bộ với DB
     };
   }
 
   factory Room.fromMap(Map<String, dynamic> map) {
     return Room(
       id: map['id'],
-      hotelId: map['hotelId'],
-      roomNumber: map['roomNumber'],
-      type: map['type'],
-      price: map['price'],
-      isAvailable: map['isAvailable'] == 1,
+      hotelId: map['hotel_id'] ?? 0,
+      roomNumber: map['room_number'] ?? '',
+      type: map['type'] ?? '',
+      price: (map['price'] as num?)?.toDouble() ?? 0.0,
+      isAvailable: map['status'] == 'Available',
     );
   }
 }

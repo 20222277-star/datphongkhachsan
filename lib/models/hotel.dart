@@ -6,7 +6,7 @@ class Hotel {
   final String amenities;
   final String imageUrl;
   final List<String> gallery;
-  final int stars; // Thêm số sao
+  final int stars;
 
   Hotel({
     this.id,
@@ -20,8 +20,7 @@ class Hotel {
   });
 
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
+    final Map<String, dynamic> map = {
       'name': name,
       'location': location,
       'description': description,
@@ -30,15 +29,17 @@ class Hotel {
       'gallery': gallery.join(','),
       'stars': stars,
     };
+    if (id != null) map['id'] = id; // CHỈ GỬI ID NẾU CÓ (DÙNG ĐỂ UPDATE)
+    return map;
   }
 
   factory Hotel.fromMap(Map<String, dynamic> map) {
     return Hotel(
       id: map['id'],
-      name: map['name'],
-      location: map['location'],
-      description: map['description'],
-      amenities: map['amenities'],
+      name: map['name'] ?? '',
+      location: map['location'] ?? '',
+      description: map['description'] ?? '',
+      amenities: map['amenities'] ?? '',
       imageUrl: map['image_url'] ?? '',
       gallery: (map['gallery'] as String?)?.split(',').where((s) => s.isNotEmpty).toList() ?? [],
       stars: map['stars'] ?? 3,

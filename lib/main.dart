@@ -4,10 +4,8 @@ import 'providers/user_provider.dart';
 import 'screens/login_screen.dart';
 
 void main() async {
+  // Đảm bảo Flutter được khởi tạo trước khi gọi bất cứ hàm nào khác
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Chạy bằng REST API nên không cần khởi tạo Supabase ở đây nữa
-  // Giúp app siêu nhẹ và không bị lỗi hệ thống Windows
 
   runApp(
     MultiProvider(
@@ -23,7 +21,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Quản lý đặt phòng khách sạn',
+      title: 'VN-BOOKING PRO',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue[900]!),

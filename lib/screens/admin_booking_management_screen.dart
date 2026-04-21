@@ -21,27 +21,33 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
     });
   }
 
-  // NÂNG CẤP: Tự động hóa thay đổi trạng thái phòng khi đổi trạng thái đơn hàng
+  // CẬP NHẬT: Xử lý dữ liệu Supabase lồng nhau (Nested data)
   void _updateStatus(int bookingId, int roomId, String newStatus) async {
+    print("DEBUG: Updating Booking $bookingId, Room $roomId to $newStatus");
+    
     showDialog(context: context, barrierDismissible: false, builder: (c) => Center(child: CircularProgressIndicator()));
     
-    await DatabaseHelper.instance.updateBookingStatus(bookingId, newStatus);
-    
-    // LOGIC TỰ ĐỘNG HÓA
-    if (newStatus == 'Checked-in') {
-      // Khách nhận phòng -> Đổi phòng sang trạng thái Occupied
-      await DatabaseHelper.instance.updateRoomStatus(roomId, 'Occupied');
-    } else if (newStatus == 'Completed') {
-      // Khách trả phòng -> Đổi phòng về trạng thái Available
-      await DatabaseHelper.instance.updateRoomStatus(roomId, 'Available');
-    } else if (newStatus == 'Cancelled') {
-      // Hủy đơn -> Đổi phòng về Available
-      await DatabaseHelper.instance.updateRoomStatus(roomId, 'Available');
-    }
+    try {
+      await DatabaseHelper.instance.updateBookingStatus(bookingId, newStatus);
+      
+      // LOGIC TỰ ĐỘNG HÓA TRẠNG THÁI PHÒNG
+      if (newStatus == 'Confirmed' || newStatus == 'Checked-in') {
+        await DatabaseHelper.instance.updateRoomStatus(roomId, 'Occupied');
+      } else if (newStatus == 'Completed' || newStatus == 'Cancelled') {
+        await DatabaseHelper.instance.updateRoomStatus(roomId, 'Available');
+      }
 
-    Navigator.pop(context); // Tắt loading
-    _loadBookings();
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã cập nhật: $newStatus')));
+      if (mounted) {
+        Navigator.pop(context); // Tắt loading
+        _loadBookings();
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã cập nhật đơn hàng thành: $newStatus')));
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi khi cập nhật: $e'), backgroundColor: Colors.red));
+      }
+    }
   }
 
   void _viewBill(String? url) {
@@ -80,7 +86,9 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _bookingsFuture,
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+          if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
+          if (snapshot.hasError) return Center(child: Text('Lỗi: ${snapshot.error}'));
+          
           final bookings = snapshot.data!;
           if (bookings.isEmpty) return Center(child: Text('Chưa có đơn đặt nào.'));
 
@@ -89,6 +97,23 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
             itemCount: bookings.length,
             itemBuilder: (context, index) {
               final b = bookings[index];
+              
+              // MAPPING DỮ LIỆU TỪ SUPABASE (Nested Objects)
+              final int bookingId = b['id'];
+              final String status = b['status'] ?? 'Pending';
+              final double totalPrice = (b['total_price'] ?? 0).toDouble();
+              
+              // Lấy thông tin user từ quan hệ lồng
+              final user = b['users'] ?? {};
+              final String customerName = user['full_name'] ?? user['username'] ?? 'Ẩn danh';
+              final String customerPhone = user['phone'] ?? 'Không có SĐT';
+
+              // Lấy thông tin phòng và khách sạn từ quan hệ lồng
+              final room = b['rooms'] ?? {};
+              final int roomId = room['id'] ?? 0;
+              final String roomNumber = room['room_number']?.toString() ?? 'N/A';
+              final String hotelName = (room['hotels'] != null) ? room['hotels']['name'] : 'N/A';
+
               return Card(
                 elevation: 4,
                 margin: EdgeInsets.only(bottom: 16),
@@ -100,60 +125,59 @@ class _AdminBookingManagementScreenState extends State<AdminBookingManagementScr
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Đơn hàng #${b['id']}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+                          Text('Đơn hàng #$bookingId', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
                           Container(
                             padding: EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(color: _getStatusColor(b['status']).withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-                            child: Text(b['status'], style: TextStyle(color: _getStatusColor(b['status']), fontWeight: FontWeight.bold)),
+                            decoration: BoxDecoration(color: _getStatusColor(status).withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+                            child: Text(status, style: TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
                       Divider(),
-                      Text('${b['hotelName']} - Phòng ${b['roomNumber']}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text('$hotelName - Phòng $roomNumber', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                       SizedBox(height: 10),
-                      Text('Khách hàng: ${b['fullName']}'),
-                      Text('SĐT: ${b['phone']}'),
-                      Text('Giá: ${b['totalPrice'].toStringAsFixed(0)}đ'),
+                      Text('Khách hàng: $customerName'),
+                      Text('SĐT: $customerPhone'),
+                      Text('Giá: ${totalPrice.toStringAsFixed(0)}đ'),
                       SizedBox(height: 20),
                       
-                      // NÚT HÀNH ĐỘNG THEO QUY TRÌNH
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           children: [
                             ElevatedButton.icon(
-                              onPressed: () => _viewBill(b['paymentProofUrl']),
+                              onPressed: () => _viewBill(b['payment_proof_url']),
                               icon: Icon(Icons.receipt_long),
                               label: Text('XEM BILL'),
                               style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[900], foregroundColor: Colors.white),
                             ),
                             SizedBox(width: 10),
                             
-                            if (b['status'] == 'Pending') ...[
+                            if (status == 'Pending') ...[
                               ElevatedButton(
-                                onPressed: () => _updateStatus(b['id'], b['roomId'], 'Confirmed'),
+                                onPressed: () => _updateStatus(bookingId, roomId, 'Confirmed'),
                                 child: Text('XÁC NHẬN BILL'),
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                               ),
                               SizedBox(width: 10),
                               ElevatedButton(
-                                onPressed: () => _updateStatus(b['id'], b['roomId'], 'Cancelled'),
+                                onPressed: () => _updateStatus(bookingId, roomId, 'Cancelled'),
                                 child: Text('HỦY ĐƠN'),
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
                               ),
                             ],
                             
-                            if (b['status'] == 'Confirmed') 
+                            if (status == 'Confirmed') 
                               ElevatedButton.icon(
-                                onPressed: () => _updateStatus(b['id'], b['roomId'], 'Checked-in'),
+                                onPressed: () => _updateStatus(bookingId, roomId, 'Checked-in'),
                                 icon: Icon(Icons.login),
                                 label: Text('NHẬN PHÒNG (CHECK-IN)'),
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.purple, foregroundColor: Colors.white),
                               ),
                               
-                            if (b['status'] == 'Checked-in')
+                            if (status == 'Checked-in')
                               ElevatedButton.icon(
-                                onPressed: () => _updateStatus(b['id'], b['roomId'], 'Completed'),
+                                onPressed: () => _updateStatus(bookingId, roomId, 'Completed'),
                                 icon: Icon(Icons.logout),
                                 label: Text('TRẢ PHÒNG (CHECK-OUT)'),
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.green[800], foregroundColor: Colors.white),

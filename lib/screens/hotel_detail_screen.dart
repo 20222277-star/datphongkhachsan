@@ -17,6 +17,7 @@ class HotelDetailScreen extends StatefulWidget {
 
 class _HotelDetailScreenState extends State<HotelDetailScreen> {
   late Future<List<Room>> _roomsFuture;
+  late Future<List<Map<String, dynamic>>> _reviewsFuture;
   DateTimeRange? _selectedDateRange;
   String _selectedImageUrl = '';
 
@@ -24,20 +25,65 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
   void initState() {
     super.initState();
     _selectedImageUrl = widget.hotel.imageUrl;
-    _loadAvailableRooms(); // Khởi tạo danh sách phòng
+    _loadAvailableRooms();
+    _loadReviews();
   }
 
-  // Hàm tải danh sách phòng trống thực tế
   void _loadAvailableRooms() {
     setState(() {
       if (_selectedDateRange == null) {
-        // Nếu chưa chọn ngày, hiện tất cả phòng đang ở trạng thái 'Available'
         _roomsFuture = DatabaseHelper.instance.getRoomsByHotel(widget.hotel.id!);
       } else {
-        // Nếu đã chọn ngày, gọi hàm thông minh để lọc phòng chưa bị đặt
         _roomsFuture = DatabaseHelper.instance.getAvailableRooms(widget.hotel.id!, _selectedDateRange!);
       }
     });
+  }
+
+  void _loadReviews() {
+    setState(() {
+      _reviewsFuture = DatabaseHelper.instance.getReviewsByHotel(widget.hotel.id!);
+    });
+  }
+
+  // WIDGET HIỂN THỊ ẢNH CÓ HIỆU ỨNG LOADING
+  Widget _buildNetworkImage(String url, {double? height, double? width, BoxFit fit = BoxFit.cover}) {
+    return Image.network(
+      url,
+      height: height,
+      width: width,
+      fit: fit,
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded) return child;
+        return AnimatedOpacity(
+          child: child,
+          opacity: frame == null ? 0 : 1,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeOut,
+        );
+      },
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Container(
+          height: height,
+          width: width,
+          color: Colors.grey[100],
+          child: Center(
+            child: CircularProgressIndicator(
+              value: loadingProgress.expectedTotalBytes != null
+                  ? loadingProgress.cumulativeBytesLoaded / loadingProgress.expectedTotalBytes!
+                  : null,
+              strokeWidth: 2,
+            ),
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) => Container(
+        height: height,
+        width: width,
+        color: Colors.grey[200],
+        child: Icon(Icons.broken_image, color: Colors.grey),
+      ),
+    );
   }
 
   void _showBookingDialog(Room room) {
@@ -104,7 +150,7 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đặt phòng thành công! Hẹn gặp bạn tại khách sạn.')));
     }
-    _loadAvailableRooms(); // Tải lại danh sách phòng sau khi đặt
+    _loadAvailableRooms();
   }
 
   void _showQRDialog(double price) async {
@@ -118,21 +164,73 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
           children: [
             Text('Vui lòng quét mã QR để thanh toán:'),
             SizedBox(height: 15),
-            Image.network(qrUrl, height: 250, errorBuilder: (c,e,s) => Icon(Icons.qr_code, size: 100)),
+            _buildNetworkImage(qrUrl, height: 250),
             SizedBox(height: 10),
             Text('Số tiền: ${price.toStringAsFixed(0)}đ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.blue[900])),
           ],
         ),
         actions: [
-          ElevatedButton(onPressed: () => Navigator.pop(context), child: Text('TÔI ĐÀ CHUYỂN KHOẢN')),
+          ElevatedButton(onPressed: () => Navigator.pop(context), child: Text('TÔI ĐÃ CHUYỂN KHOẢN')),
         ],
+      ),
+    );
+  }
+
+  void _showAddReviewDialog() {
+    final user = Provider.of<UserProvider>(context, listen: false).user;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Vui lòng đăng nhập để đánh giá')));
+      return;
+    }
+
+    final commentController = TextEditingController();
+    int rating = 5;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Viết đánh giá'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(5, (index) => IconButton(
+                  icon: Icon(index < rating ? Icons.star : Icons.star_border, color: Colors.orange, size: 30),
+                  onPressed: () => setDialogState(() => rating = index + 1),
+                )),
+              ),
+              TextField(
+                controller: commentController,
+                maxLines: 3,
+                decoration: InputDecoration(hintText: 'Nhận xét của bạn...', border: OutlineInputBorder()),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text('HỦY')),
+            ElevatedButton(
+              onPressed: () async {
+                if (commentController.text.isNotEmpty) {
+                  await DatabaseHelper.instance.addReview(user.id!, widget.hotel.id!, rating, commentController.text);
+                  Navigator.pop(context);
+                  _loadReviews();
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Cảm ơn bạn đã đánh giá!')));
+                }
+              },
+              child: Text('GỬI'),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isWeb = MediaQuery.of(context).size.width > 800;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isWeb = screenWidth > 800;
     final allImages = [widget.hotel.imageUrl, ...widget.hotel.gallery];
 
     return Scaffold(
@@ -140,7 +238,23 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            Image.network(_selectedImageUrl, height: 400, width: double.infinity, fit: BoxFit.cover, errorBuilder: (c,e,s) => Container(height: 400, color: Colors.grey, child: Icon(Icons.image_not_supported, size: 100))),
+            // HERO IMAGE SECTION
+            GestureDetector(
+              onTap: () {
+                showDialog(context: context, builder: (c) => Dialog.fullscreen(
+                  backgroundColor: Colors.black,
+                  child: Stack(
+                    children: [
+                      Center(child: _buildNetworkImage(_selectedImageUrl, fit: BoxFit.contain)),
+                      Positioned(top: 20, right: 20, child: IconButton(icon: Icon(Icons.close, color: Colors.white, size: 30), onPressed: () => Navigator.pop(c))),
+                    ],
+                  ),
+                ));
+              },
+              child: _buildNetworkImage(_selectedImageUrl, height: 450, width: double.infinity),
+            ),
+            
+            // THUMBNAILS SECTION
             Container(
               height: 100, padding: EdgeInsets.symmetric(vertical: 10),
               child: ListView.builder(
@@ -150,41 +264,61 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
                   onTap: () => setState(() => _selectedImageUrl = allImages[index]),
                   child: Container(
                     margin: EdgeInsets.symmetric(horizontal: 5), width: 120,
-                    decoration: BoxDecoration(border: Border.all(color: _selectedImageUrl == allImages[index] ? Colors.blue : Colors.transparent, width: 3), borderRadius: BorderRadius.circular(8)),
-                    child: ClipRRect(borderRadius: BorderRadius.circular(5), child: Image.network(allImages[index], fit: BoxFit.cover)),
+                    decoration: BoxDecoration(border: Border.all(color: _selectedImageUrl == allImages[index] ? Colors.blue : Colors.grey[300]!, width: 2), borderRadius: BorderRadius.circular(8)),
+                    child: ClipRRect(borderRadius: BorderRadius.circular(6), child: _buildNetworkImage(allImages[index])),
                   ),
                 ),
               ),
             ),
+
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: isWeb ? 100 : 16, vertical: 20),
+              padding: EdgeInsets.symmetric(horizontal: isWeb ? screenWidth * 0.15 : 16, vertical: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildSectionTitle('GIỚI THIỆU'),
-                  Text(widget.hotel.description, style: TextStyle(fontSize: 16, height: 1.6)),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildSectionTitle('GIỚI THIỆU'),
+                      Row(children: [Icon(Icons.location_on, color: Colors.red, size: 18), SizedBox(width: 5), Text(widget.hotel.location, style: TextStyle(color: Colors.grey[700]))]),
+                    ],
+                  ),
+                  Text(widget.hotel.description, style: TextStyle(fontSize: 16, height: 1.6, color: Colors.black87)),
                   SizedBox(height: 20),
+                  
+                  _buildSectionTitle('TIỆN NGHI'),
+                  Wrap(
+                    spacing: 10, runSpacing: 10,
+                    children: widget.hotel.amenities.split(',').map((a) => Chip(
+                      label: Text(a.trim()),
+                      backgroundColor: Colors.blue[50],
+                      labelStyle: TextStyle(color: Colors.blue[900], fontSize: 13),
+                    )).toList(),
+                  ),
+                  
+                  SizedBox(height: 30),
                   _buildSectionTitle('CHỌN THỜI GIAN NGHỈ DƯỠNG'),
                   ElevatedButton.icon(
                     onPressed: () async {
                       final picked = await showDateRangePicker(context: context, firstDate: DateTime.now(), lastDate: DateTime.now().add(Duration(days: 365)));
                       if (picked != null) {
                         setState(() => _selectedDateRange = picked);
-                        _loadAvailableRooms(); // Gọi hàm lọc lại phòng khi đổi ngày
+                        _loadAvailableRooms();
                       }
                     },
                     icon: Icon(Icons.calendar_month),
                     label: Text(_selectedDateRange == null ? 'Bấm để chọn ngày Nhận & Trả phòng' : 'Đã chọn: ${_selectedDateRange!.start.toString().split(' ')[0]} - ${_selectedDateRange!.end.toString().split(' ')[0]}'),
-                    style: ElevatedButton.styleFrom(backgroundColor: _selectedDateRange == null ? Colors.grey[200] : Colors.blue[50], foregroundColor: Colors.blue[900]),
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.blue[900], side: BorderSide(color: Colors.blue[900]!), minimumSize: Size(double.infinity, 50)),
                   ),
+                  
                   SizedBox(height: 30),
                   _buildSectionTitle('DANH SÁCH PHÒNG'),
                   FutureBuilder<List<Room>>(
                     future: _roomsFuture,
                     builder: (context, snapshot) {
-                      if (!snapshot.hasData) return CircularProgressIndicator();
+                      if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
                       final rooms = snapshot.data!;
-                      if (rooms.isEmpty) return Text('Tiếc quá! Không còn phòng trống trong khoảng thời gian này.', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold));
+                      if (rooms.isEmpty) return Container(padding: EdgeInsets.all(20), decoration: BoxDecoration(color: Colors.red[50], borderRadius: BorderRadius.circular(8)), child: Center(child: Text('Tiếc quá! Không còn phòng trống trong khoảng thời gian này.', style: TextStyle(color: Colors.red[900], fontWeight: FontWeight.bold))));
 
                       return ListView.builder(
                         shrinkWrap: true, physics: NeverScrollableScrollPhysics(),
@@ -192,13 +326,15 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
                         itemBuilder: (context, index) {
                           final room = rooms[index];
                           return Card(
+                            margin: EdgeInsets.only(bottom: 12),
                             child: ListTile(
-                              leading: Icon(Icons.king_bed, color: Colors.blue[900]),
-                              title: Text('${room.type} - Room ${room.roomNumber}', style: TextStyle(fontWeight: FontWeight.bold)),
-                              subtitle: Text('${room.price.toStringAsFixed(0)}đ / đêm'),
+                              leading: Icon(Icons.king_bed, color: Colors.blue[900], size: 30),
+                              title: Text('${room.type} - Phòng ${room.roomNumber}', style: TextStyle(fontWeight: FontWeight.bold)),
+                              subtitle: Text('${room.price.toStringAsFixed(0)}đ / đêm', style: TextStyle(color: Colors.orange[900], fontWeight: FontWeight.bold)),
                               trailing: ElevatedButton(
                                 onPressed: room.isAvailable ? () => _showBookingDialog(room) : null,
-                                child: Text(room.isAvailable ? 'ĐẶT PHÒNG' : 'HẾT PHÒNG'),
+                                child: Text(room.isAvailable ? 'ĐẶT NGAY' : 'HẾT PHÒNG'),
+                                style: ElevatedButton.styleFrom(backgroundColor: room.isAvailable ? Colors.blue[900] : Colors.grey, foregroundColor: Colors.white),
                               ),
                             ),
                           );
@@ -206,6 +342,53 @@ class _HotelDetailScreenState extends State<HotelDetailScreen> {
                       );
                     },
                   ),
+                  
+                  SizedBox(height: 40),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      _buildSectionTitle('ĐÁNH GIÁ TỪ KHÁCH HÀNG'),
+                      TextButton.icon(onPressed: _showAddReviewDialog, icon: Icon(Icons.rate_review), label: Text('Viết đánh giá')),
+                    ],
+                  ),
+                  FutureBuilder<List<Map<String, dynamic>>>(
+                    future: _reviewsFuture,
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+                      final reviews = snapshot.data!;
+                      if (reviews.isEmpty) return Center(child: Text('Chưa có đánh giá nào cho khách sạn này.'));
+
+                      return ListView.builder(
+                        shrinkWrap: true, physics: NeverScrollableScrollPhysics(),
+                        itemCount: reviews.length,
+                        itemBuilder: (context, index) {
+                          final r = reviews[index];
+                          final user = r['users'] ?? {};
+                          return Card(
+                            margin: EdgeInsets.only(bottom: 10),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(user['full_name'] ?? 'Khách ẩn danh', style: TextStyle(fontWeight: FontWeight.bold)),
+                                      Row(children: List.generate(5, (i) => Icon(Icons.star, size: 14, color: i < (r['rating'] ?? 0) ? Colors.orange : Colors.grey))),
+                                    ],
+                                  ),
+                                  SizedBox(height: 5),
+                                  Text(r['comment'] ?? '', style: TextStyle(color: Colors.grey[800])),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                  SizedBox(height: 50),
                 ],
               ),
             ),

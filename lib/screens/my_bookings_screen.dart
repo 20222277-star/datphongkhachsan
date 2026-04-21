@@ -28,7 +28,6 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     }
   }
 
-  // Nâng cấp: Cho phép khách hàng chọn ảnh từ thiết bị
   void _pickAndUploadBill(int bookingId) {
     final html.FileUploadInputElement uploadInput = html.FileUploadInputElement();
     uploadInput.accept = 'image/*';
@@ -50,12 +49,10 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
             builder: (context) => Center(child: CircularProgressIndicator()),
           );
 
-          // Upload ảnh lên Cloud
           final url = await DatabaseHelper.instance.uploadImage(bytes, fileName);
-          Navigator.pop(context); // Tắt loading
+          Navigator.pop(context);
 
           if (url != null) {
-            // Cập nhật link ảnh vào đơn hàng
             await DatabaseHelper.instance.submitPaymentBill(bookingId, url);
             _loadBookings();
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Đã gửi minh chứng thành công!')));
@@ -92,6 +89,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
     switch (status) {
       case 'Pending': return Colors.orange;
       case 'Confirmed': return Colors.blue;
+      case 'Checked-in': return Colors.purple;
       case 'Completed': return Colors.green;
       case 'Cancelled': return Colors.red;
       default: return Colors.grey;
@@ -109,7 +107,9 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: _bookingsFuture,
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return Center(child: CircularProgressIndicator());
+          if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator());
+          if (snapshot.hasError) return Center(child: Text('Lỗi: ${snapshot.error}'));
+          
           final bookings = snapshot.data!;
           if (bookings.isEmpty) return Center(child: Text('Bạn chưa có đơn đặt phòng nào.'));
 
@@ -118,8 +118,22 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
             itemCount: bookings.length,
             itemBuilder: (context, index) {
               final b = bookings[index];
-              final canCancel = b['status'] == 'Pending';
-              final hasBill = b['paymentProofUrl'] != null && b['paymentProofUrl']!.isNotEmpty;
+              
+              // MAPPING DỮ LIỆU TỪ SUPABASE (Nested Objects)
+              final int bookingId = b['id'];
+              final String status = b['status'] ?? 'Pending';
+              final double totalPrice = (b['total_price'] ?? 0).toDouble();
+              final String? billUrl = b['payment_proof_url'];
+              final String checkIn = b['check_in_date']?.toString().split(' ')[0] ?? 'N/A';
+              final String checkOut = b['check_out_date']?.toString().split(' ')[0] ?? 'N/A';
+
+              // Lấy thông tin phòng và khách sạn lồng nhau
+              final room = b['rooms'] ?? {};
+              final String roomNumber = room['room_number']?.toString() ?? 'N/A';
+              final String hotelName = (room['hotels'] != null) ? room['hotels']['name'] : 'Khách sạn ẩn';
+
+              final canCancel = status == 'Pending';
+              final hasBill = billUrl != null && billUrl.isNotEmpty;
 
               return Card(
                 elevation: 4,
@@ -133,24 +147,25 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('Đơn hàng #${b['id']}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600])),
+                          Text('Đơn hàng #$bookingId', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey[600])),
                           Container(
                             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                             decoration: BoxDecoration(
-                              color: _getStatusColor(b['status']).withOpacity(0.1),
+                              color: _getStatusColor(status).withOpacity(0.1),
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            child: Text(b['status'], style: TextStyle(color: _getStatusColor(b['status']), fontWeight: FontWeight.bold)),
+                            child: Text(status, style: TextStyle(color: _getStatusColor(status), fontWeight: FontWeight.bold)),
                           ),
                         ],
                       ),
                       Divider(height: 24),
-                      Text(b['hotelName'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text('Phòng: ${b['roomNumber']}', style: TextStyle(fontSize: 16, color: Colors.blue[900])),
+                      Text(hotelName, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text('Phòng: $roomNumber', style: TextStyle(fontSize: 16, color: Colors.blue[900])),
                       SizedBox(height: 8),
-                      Text('Lịch trình: ${b['checkInDate'].split('T')[0]} ➔ ${b['checkOutDate'].split('T')[0]}'),
-                      Text('Tổng thanh toán: ${b['totalPrice'].toStringAsFixed(0)}đ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange[900])),
+                      Text('Lịch trình: $checkIn ➔ $checkOut'),
+                      Text('Tổng thanh toán: ${totalPrice.toStringAsFixed(0)}đ', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.orange[900])),
                       SizedBox(height: 20),
+                      
                       if (hasBill)
                         Container(
                           padding: EdgeInsets.all(8),
@@ -160,19 +175,20 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                             children: [
                               Icon(Icons.check_circle, color: Colors.green),
                               SizedBox(width: 8),
-                              Expanded(child: Text('Đã gửi minh chứng thanh toán', style: TextStyle(color: Colors.green[800]))),
+                              Expanded(child: Text('Đã gửi minh chứng thanh toán', style: TextStyle(color: Colors.green[800], fontSize: 13))),
                               TextButton(onPressed: () {
-                                showDialog(context: context, builder: (c) => AlertDialog(content: Image.network(b['paymentProofUrl'])));
+                                showDialog(context: context, builder: (c) => AlertDialog(content: Image.network(billUrl)));
                               }, child: Text('XEM LẠI'))
                             ],
                           ),
                         ),
+                        
                       Row(
                         children: [
-                          if (b['status'] == 'Pending')
+                          if (status == 'Pending')
                             Expanded(
                               child: ElevatedButton.icon(
-                                onPressed: () => _pickAndUploadBill(b['id']),
+                                onPressed: () => _pickAndUploadBill(bookingId),
                                 icon: Icon(Icons.upload_file),
                                 label: Text(hasBill ? 'GỬI LẠI BILL' : 'GỬI BILL'),
                                 style: ElevatedButton.styleFrom(backgroundColor: Colors.blue[900], foregroundColor: Colors.white),
@@ -182,7 +198,7 @@ class _MyBookingsScreenState extends State<MyBookingsScreen> {
                             SizedBox(width: 10),
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: () => _cancelBooking(b['id']),
+                                onPressed: () => _cancelBooking(bookingId),
                                 icon: Icon(Icons.cancel),
                                 label: Text('HỦY ĐƠN'),
                                 style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
