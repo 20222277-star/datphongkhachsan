@@ -28,11 +28,8 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
     });
   }
 
-  // HÀM NÉN ẢNH CHUYÊN NGHIỆP TRÊN WEB
   Future<Uint8List> _compressImage(Uint8List bytes) async {
     final Completer<Uint8List> completer = Completer();
-    
-    // Sử dụng HTML5 Canvas để nén ảnh (Tối ưu cho Web)
     final blob = html.Blob([bytes]);
     final url = html.Url.createObjectUrlFromBlob(blob);
     final img = html.ImageElement();
@@ -41,8 +38,6 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
     img.onLoad.listen((_) {
       final canvas = html.CanvasElement();
       final ctx = canvas.context2D;
-      
-      // Giới hạn kích thước tối đa 1200px để ảnh vẫn nét mà dung lượng cực nhẹ
       double maxWidth = 1200;
       double width = img.width!.toDouble();
       double height = img.height!.toDouble();
@@ -56,7 +51,6 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
       canvas.height = height.toInt();
       ctx.drawImageScaled(img, 0, 0, canvas.width!, canvas.height!);
       
-      // Xuất ra JPEG với chất lượng 0.7 (Nén 70% - Rất tối ưu)
       final dataUrl = canvas.toDataUrl('image/jpeg', 0.7);
       final base64String = dataUrl.split(',')[1];
       completer.complete(base64Decode(base64String));
@@ -78,19 +72,11 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
         final reader = html.FileReader();
         reader.onLoadEnd.listen((e) async {
           final rawBytes = reader.result as Uint8List;
-          
-          showDialog(context: context, barrierDismissible: false, builder: (context) => Center(child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [CircularProgressIndicator(), SizedBox(height: 10), Text("Đang nén và tải ảnh lên...", style: TextStyle(color: Colors.white))],
-          )));
-
-          // NÉN ẢNH TRƯỚC KHI TẢI LÊN
+          showDialog(context: context, barrierDismissible: false, builder: (context) => Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(), SizedBox(height: 10), Text("Đang nén và tải ảnh lên...", style: TextStyle(color: Colors.white))])));
           final compressedBytes = await _compressImage(rawBytes);
           final fileName = 'hotel_${DateTime.now().millisecondsSinceEpoch}.jpg';
-          
           final url = await DatabaseHelper.instance.uploadImage(compressedBytes, fileName);
-          Navigator.pop(context); // Tắt loading
-          
+          Navigator.pop(context);
           if (url != null) { onUploaded(url); }
         });
         reader.readAsArrayBuffer(file);
@@ -107,27 +93,19 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
     uploadInput.onChange.listen((e) async {
       final files = uploadInput.files;
       if (files != null && files.isNotEmpty) {
-        showDialog(context: context, barrierDismissible: false, builder: (context) => Center(child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [CircularProgressIndicator(), SizedBox(height: 10), Text("Đang nén và tải lên ${files.length} ảnh...", style: TextStyle(color: Colors.white))],
-        )));
-
+        showDialog(context: context, barrierDismissible: false, builder: (context) => Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(), SizedBox(height: 10), Text("Đang nén và tải lên ${files.length} ảnh...", style: TextStyle(color: Colors.white))])));
         List<String> uploadedUrls = [];
         for (var file in files) {
           final reader = html.FileReader();
           final completer = Completer<Uint8List>();
           reader.onLoadEnd.listen((e) => completer.complete(reader.result as Uint8List));
           reader.readAsArrayBuffer(file);
-          
           final rawBytes = await completer.future;
-          // NÉN TỪNG ẢNH TRONG GALLERY
           final compressedBytes = await _compressImage(rawBytes);
           final fileName = 'gallery_${DateTime.now().microsecondsSinceEpoch}.jpg';
-          
           final url = await DatabaseHelper.instance.uploadImage(compressedBytes, fileName);
           if (url != null) uploadedUrls.add(url);
         }
-
         Navigator.pop(context);
         if (uploadedUrls.isNotEmpty) onUploaded(uploadedUrls);
       }
@@ -141,6 +119,7 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
     final amenitiesController = TextEditingController(text: hotel?.amenities);
     String currentImageUrl = hotel?.imageUrl ?? '';
     List<String> currentGallery = List.from(hotel?.gallery ?? []);
+    int stars = hotel?.stars ?? 3;
 
     showDialog(
       context: context,
@@ -217,6 +196,14 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
                   ),
 
                   Divider(height: 30),
+                  Text('Xếp hạng sao', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Row(
+                    children: List.generate(5, (index) => IconButton(
+                      icon: Icon(index < stars ? Icons.star : Icons.star_border, color: Colors.orange, size: 30),
+                      onPressed: () => setDialogState(() => stars = index + 1),
+                    )),
+                  ),
+                  SizedBox(height: 10),
                   TextField(controller: nameController, decoration: InputDecoration(labelText: 'Tên khách sạn', border: OutlineInputBorder())),
                   SizedBox(height: 10),
                   TextField(controller: locationController, decoration: InputDecoration(labelText: 'Địa điểm', border: OutlineInputBorder())),
@@ -233,19 +220,18 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
             ElevatedButton(
               onPressed: () async {
                 if (nameController.text.isNotEmpty) {
-                  final newHotel = Hotel(
-                    id: hotel?.id, 
-                    name: nameController.text, 
-                    location: locationController.text, 
-                    description: descController.text, 
-                    amenities: amenitiesController.text, 
-                    imageUrl: currentImageUrl, 
-                    gallery: currentGallery
-                  );
-                  if (hotel == null) await DatabaseHelper.instance.addHotel(newHotel);
-                  else await DatabaseHelper.instance.updateHotel(newHotel);
-                  Navigator.pop(context);
-                  _loadHotels();
+                  final newHotel = Hotel(id: hotel?.id, name: nameController.text, location: locationController.text, description: descController.text, amenities: amenitiesController.text, imageUrl: currentImageUrl, gallery: currentGallery, stars: stars);
+                  try {
+                    if (hotel == null) await DatabaseHelper.instance.addHotel(newHotel);
+                    else await DatabaseHelper.instance.updateHotel(newHotel);
+                    if (mounted) {
+                      Navigator.pop(context);
+                      _loadHotels();
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(hotel == null ? 'Thêm thành công!' : 'Cập nhật thành công!')));
+                    }
+                  } catch (e) {
+                    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Lỗi: $e'), backgroundColor: Colors.red));
+                  }
                 }
               },
               child: Text(hotel == null ? 'THÊM MỚI' : 'CẬP NHẬT'),
@@ -260,7 +246,23 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Quản lý Khách sạn'), backgroundColor: Colors.red[900], foregroundColor: Colors.white),
+      // DI CHUYỂN NÚT THÊM LÊN APPBAR
+      appBar: AppBar(
+        title: Text('QUẢN LÝ KHÁCH SẠN'), 
+        backgroundColor: Colors.red[900], 
+        foregroundColor: Colors.white,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 10),
+            child: ElevatedButton.icon(
+              onPressed: () => _showHotelForm(),
+              icon: Icon(Icons.add),
+              label: Text('THÊM KHÁCH SẠN'),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.red[900]),
+            ),
+          )
+        ],
+      ),
       body: FutureBuilder<List<Hotel>>(
         future: _hotelsFuture,
         builder: (context, snapshot) {
@@ -269,6 +271,7 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
           
           final hotels = snapshot.data!;
           return ListView.builder(
+            padding: EdgeInsets.only(bottom: 100), // Khoảng trống phía dưới để không bị sát mép
             itemCount: hotels.length,
             itemBuilder: (context, index) {
               final hotel = hotels[index];
@@ -286,7 +289,7 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(hotel.location, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      Text('${hotel.gallery.length} ảnh trong bộ sưu tập', style: TextStyle(fontSize: 12, color: Colors.blue[800])),
+                      Row(children: List.generate(5, (i) => Icon(Icons.star, size: 14, color: i < hotel.stars ? Colors.orange : Colors.grey[300]))),
                     ],
                   ),
                   trailing: Row(
@@ -308,13 +311,6 @@ class _AdminHotelManagementScreenState extends State<AdminHotelManagementScreen>
             },
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showHotelForm(), 
-        icon: Icon(Icons.add), 
-        label: Text('Thêm khách sạn'),
-        backgroundColor: Colors.red[900],
-        foregroundColor: Colors.white,
       ),
     );
   }

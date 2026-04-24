@@ -31,7 +31,7 @@ class DatabaseHelper {
     }
   }
 
-  // --- QUẢN LÝ ĐỊA DANH (MỚI) ---
+  // --- QUẢN LÝ ĐỊA DANH ---
   Future<List<String>> getLocations() async {
     try {
       final res = await http.get(Uri.parse('$_restUrl/locations?select=name&order=name.asc'), headers: _headers);
@@ -144,13 +144,19 @@ class DatabaseHelper {
     data.remove('id');
     final res = await http.post(Uri.parse('$_restUrl/hotels'), headers: _headers, body: json.encode(data));
     _log('addHotel', res);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('Không thể thêm khách sạn: ${res.body}');
+    }
   }
 
   Future<void> updateHotel(Hotel h) async {
     final data = h.toMap();
-    data.remove('id');
-    final res = await http.patch(Uri.parse('$_restUrl/hotels?id=eq.${h.id}'), headers: _headers, body: json.encode(data));
+    final id = data.remove('id');
+    final res = await http.patch(Uri.parse('$_restUrl/hotels?id=eq.$id'), headers: _headers, body: json.encode(data));
     _log('updateHotel', res);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('Không thể cập nhật khách sạn: ${res.body}');
+    }
   }
 
   Future<void> deleteHotel(int id) async {
@@ -170,6 +176,9 @@ class DatabaseHelper {
     data.remove('id');
     final res = await http.post(Uri.parse('$_restUrl/rooms'), headers: _headers, body: json.encode(data));
     _log('addRoom', res);
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw Exception('Không thể thêm phòng: ${res.body}');
+    }
   }
 
   Future<void> updateRoomStatus(int roomId, String status) async {
